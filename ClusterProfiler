@@ -1,0 +1,112 @@
+install.packages("BiocManager")  # Install BiocManager
+BiocManager::install("clusterProfiler")
+BiocManager::install("org.Hs.eg.db")   # For human gene annotation (change if using a different species)
+BiocManager::install("enrichplot")     # For visualization
+BiocManager::install("ggplot2")        # For plotting
+BiocManager::install("DOSE")           # Required for enrichment analysis
+BiocManager::install("pathview")       # For KEGG pathway visualization
+
+library(clusterProfiler)
+library(org.Hs.eg.db)   # Change "Hs" to species-specific annotation if needed
+library(enrichplot)
+library(ggplot2)
+library(DOSE)
+library(pathview)
+
+gene_symbols <- c("PLA2G2A", "TLR2", "NLRP3", "PRKCD", "PTGS2", "PDGFRA", "IL6ST", "HPGD", "MIF", "CCR2", "MAPK9", "ALPL", "CTSK")  # Replace with your own gene list
+
+gene_list <- bitr(gene_symbols, fromType = "SYMBOL", 
+                  toType = "ENTREZID", 
+                  OrgDb = org.Hs.eg.db)
+
+print(gene_list)  # Check the converted gene list
+
+ego_bp <- enrichGO(gene = gene_list$ENTREZID, 
+                   OrgDb = org.Hs.eg.db, 
+                   keyType = "ENTREZID",
+                   ont = "BP",     # Change to "CC" or "MF" for other categories
+                   pAdjustMethod = "BH", 
+                   pvalueCutoff = 0.05, 
+                   qvalueCutoff = 0.05)
+
+ego_cc <- enrichGO(gene = gene_list$ENTREZID, 
+                   OrgDb = org.Hs.eg.db, 
+                   keyType = "ENTREZID",
+                   ont = "CC", 
+                   pAdjustMethod = "BH", 
+                   pvalueCutoff = 0.1, 
+                   qvalueCutoff = 0.1)
+
+ego_mf <- enrichGO(gene = gene_list$ENTREZID, 
+                   OrgDb = org.Hs.eg.db, 
+                   keyType = "ENTREZID",
+                   ont = "MF", 
+                   pAdjustMethod = "BH", 
+                   pvalueCutoff = 0.05, 
+                   qvalueCutoff = 0.05)
+
+# View Results
+head(ego_bp)  # View the top BP terms
+head(ego_cc)  # View the top CC terms
+head(ego_mf)  # View the top MF terms
+
+dotplot(ego_bp, showCategory=10) + ggtitle("GO Biological Process")
+dotplot(ego_cc, showCategory=10) + ggtitle("GO Cellular Component")
+dotplot(ego_mf, showCategory=10) + ggtitle("GO Molecular Function")
+
+barplot(ego_bp, showCategory=10, title="GO Biological Process")
+barplot(ego_cc, showCategory=10, title="GO Cellular Component")
+barplot(ego_mf, showCategory=10, title="GO Molecular Function")
+
+cnetplot(ego_bp, categorySize="pvalue", foldChange=NULL)
+cnetplot(ego_cc, categorySize="pvalue", foldChange=NULL)
+cnetplot(ego_mf, categorySize="pvalue", foldChange=NULL)
+
+kegg_res <- enrichKEGG(gene = gene_list$ENTREZID, 
+                       organism = "hsa",  # Change "hsa" to the respective species (e.g., "mmu" for mouse)
+                       pAdjustMethod = "BH", 
+                       pvalueCutoff = 0.05)
+
+head(kegg_res)  # View the top pathways
+
+dotplot(kegg_res, showCategory=10) + ggtitle("KEGG Pathway Enrichment")
+dotplot(kegg_res, showCategory=10) + ggtitle("KEGG Pathway Enrichment")  #same thing
+
+barplot(kegg_res, showCategory=10, title="KEGG Pathway Enrichment")
+cnetplot(kegg_res, categorySize="pvalue", foldChange=NULL)
+ridgeplot(kegg_res) + ggtitle("KEGG Pathway Density") # need to install Ridegplot
+
+
+citation("pathview")
+
+pathview(gene.data = gene_list$ENTREZID, 
+         pathway.id = "04152",  # Replace with the pathway ID from your results
+         species = "hsa")       # "hsa" for human, "mmu" for mouse, etc.
+
+write.csv(ego_bp@result, "C:/R_all_files/GO_BP_results.csv", row.names=FALSE)
+write.csv(ego_cc@result, "C:/R_all_files/GO_CC_results.csv", row.names=FALSE)
+write.csv(ego_mf@result, "C:/R_all_files/GO_MF_results.csv", row.names=FALSE)
+write.csv(kegg_res@result, "C:/R_all_files/KEGG_results.csv", row.names=FALSE)
+
+
+
+#i wanted to get the gene symbols of the connected genes, so i did the kegg enrichment again.
+# View KEGG enrichment results with gene details in R
+kegg_results_df <- as.data.frame(kegg_res@result)
+
+# Convert ENTREZ IDs to Gene Symbols
+gene_conversion <- bitr(kegg_results_df$geneID, 
+                        fromType = "ENTREZID", 
+                        toType = "SYMBOL", 
+                        OrgDb = org.Hs.eg.db)
+
+# Merge the converted symbols back into the KEGG results
+kegg_results_df$geneSymbols <- sapply(strsplit(kegg_results_df$geneID, "/"), function(x) {
+  paste(gene_conversion$SYMBOL[match(x, gene_conversion$ENTREZID)], collapse = ", ")
+})
+
+# Display KEGG pathways with gene symbols
+head(kegg_results_df[, c("ID", "Description", "GeneRatio", "BgRatio", "geneSymbols")], 20) 
+#i can change it to get top 10 results as well instead of top 20 
+
+write.csv(kegg_results_df, "C:/R_all_files/kegg_results_df.csv", row.names=FALSE)
